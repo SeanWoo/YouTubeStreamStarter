@@ -12,7 +12,6 @@ namespace YouTubeStreamStarter.Models
         internal string externalChannelId;
         internal string visitorData;
         internal string sessionToken;
-        internal string DELEGATED_SESSION_ID;
         internal string EVENT_ID;
         internal string INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT;
         internal string INNERTUBE_API_KEY;
@@ -21,5 +20,7 @@ namespace YouTubeStreamStarter.Models
         internal string geo;
         internal string userAgent;
         internal string SAPISIDHASH;
+        internal string clientName;
+        internal string onBehalfOfUser;
     }
 }
