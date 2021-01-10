@@ -24,7 +24,9 @@ namespace YouTubeStreamStarter.Models
     {
         private HttpRequest _request;
         private YouTubeParams _params;
-
+        private bool _isSaved = true;
+        private bool _differentAvatars = false;
+        private bool _differentBanners = false;
         private readonly Uri _clientAvatar = new Uri(Directory.GetCurrentDirectory() + @"\Images\clientAvatar.jpg");
         private readonly Uri _serverAvatar = new Uri(Directory.GetCurrentDirectory() + @"\Images\serverAvatar.jpg");
         private readonly Uri _clientBanner = new Uri(Directory.GetCurrentDirectory() + @"\Images\clientBanner.jpg");
@@ -36,8 +38,16 @@ namespace YouTubeStreamStarter.Models
         private ObservableCollection<VideoModel> _clientVideos;
         private ObservableCollection<VideoModel> _serverVideos;
 
-        private bool _isSaved = true;
-
+        public bool IsValid { get; private set; }
+        public string Address { get => "https://www.youtube.com/channel/" + _params.channelAddress; }
+        public bool IsSaved { 
+            get => _isSaved; 
+            private set
+            {
+                _isSaved = value;
+                OnPropertyChanged();
+            }
+        }
         public ObservableCollection<VideoModel> Videos
         {
             get => _clientVideos;
@@ -45,16 +55,6 @@ namespace YouTubeStreamStarter.Models
             {
                 _clientVideos = value;
                 CheckIsSaved();
-                OnPropertyChanged();
-            }
-        }
-
-        public bool IsValid { get; private set; }
-        public bool IsSaved { 
-            get => _isSaved; 
-            private set
-            {
-                _isSaved = value;
                 OnPropertyChanged();
             }
         }
@@ -75,7 +75,6 @@ namespace YouTubeStreamStarter.Models
                 return LoadBitmapImage(_clientBanner.LocalPath);
             }
         }
-
         public string Name
         {
             get => _clientName;
@@ -115,6 +114,10 @@ namespace YouTubeStreamStarter.Models
             _params.ip = Dns.GetHostByName(Dns.GetHostName()).AddressList[1].ToString();
             _params.userAgent = _request.UserAgent;
         }
+        public Channel(CookieContainer cookies, string proxy) : this(cookies)
+        {
+            _request.Proxy = HttpProxyClient.Parse(proxy);
+        }
 
         public void Update()
         {
@@ -133,7 +136,10 @@ namespace YouTubeStreamStarter.Models
 
         public void SaveChanges()
         {
+            if (IsSaved) return;
+
             if (!SaveChangesChannelData()) return;
+            if (!SaveChangesVideosAsync()) return;
         }
 
         public async Task UpdateAsync() => await Task.Run(Update);
@@ -226,11 +232,21 @@ namespace YouTubeStreamStarter.Models
         private bool GetSessionToken()
         {
             AddAPIHeaders();
+            var content = new StringContent("{'engagementType':'ENGAGEMENT_TYPE_CREATOR_STUDIO_ACTION','ids':[{'externalChannelId':'" + _params.externalChannelId + "'}], 'context':{ 'client':{'clientName':'" + _params.clientName + "','clientVersion': '" + _params.clientVersion + "','hl': '" + _params.hl + "','gl': '" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_route_delete_playlist_to_outertube','value':'false'},{'key':'force_live_chat_merchandise_upsell','value':'false'}]},'user':{'delegationContext':{'roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'},'externalChannelId': '" + _params.externalChannelId + "'},'serializedDelegationContext': '" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce': '" + _params.EVENT_ID + "'}}");
+            var response = _request.Post("https://studio.youtube.com/youtubei/v1/att/get?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
+            _params.challenge = Match(response.ToString(), "\"challenge\": \"(.*?)\"");
+            _params.botguardData = Match(response.ToString(), "\"program\": \"(.*?)\"");
 
-            var content = new StringContent("{'context':{'client':{'clientName':'" + _params.clientName + "','clientVersion': '" + _params.clientVersion + "','hl': '" + _params.hl + "','gl': '" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_route_delete_playlist_to_outertube','value':'false'},{'key':'force_live_chat_merchandise_upsell','value':'false'}]},'user':{'delegationContext':{'roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'},'externalChannelId': '" + _params.externalChannelId + "'},'serializedDelegationContext': '" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce': '" + _params.EVENT_ID + "'},'challenge':'a=5&a2=3&b=-x1P_Aq6qWXhlD8ePL4Ogh1DT68&c=1607268121&d=62&e3=UC-6PU5Yrqd-RIv9tmCvNeDg&c1a=1&hh=uKuOMsFARzpsI-SxhiDJCvLTvW2n4NAr359RgHwPYM0','botguardResponse':'!zc6lzufNAAXj0ixo40ImglBbVkcGylithYL4KtsVMwIAAABLUgAAACZoAQcKANOPMrsCAfjWy1pw0cBAiCXs31rHC2IsO5dwl_XjVU5DFNbbGn06b88BBl8NvvaW3htPC_ReTVQajle09T3tLTrChK8-Lt1fa2rcuBeQcSdFnpGB2JQinR7e5H3q_SEsdstBWk_7W50AXhYWBWNbuPexFA7-m3uYX7YG3j-3a7NS-McSHV2Yh8TsDA7l0uLWg-yD70GpTR-MbdVTpc7qsWjpxldSEoDIXMnd3d-SQ3FfQwcJb1YfXRm-JWpVohiHMbRDnyKOTU7C8DQozPRC4dsX2HWxmQKzhBIF5xRk7JjXLm8Y3GFCrrYnpIo9Hmf-Ja3NDaVs2yMMjTg8kLheZNLzJtNfXG0fOSCgsTKm0RkeKlDRf0ZrndVP6ymo3tZkwQQx5vVQTol8QMdYtqOMkaU38XR9dGGTy5UvJp72shbhzlFEmI3RtgpH2Izdm1ux84DjVfanL0hgIcfhPCVnfVrlCTJkhuLvUG173rCpa6FVUnye5XMAtdys5ausf0ZpNCfhOCXmSqDiaxN_xhLdG_iYAl5nZhANWYyIICkNTDaxqE1zssI0CrG0s0e0SOQdASJbh61v33eudhHIEG8e6ozGXGBVUiWy3g1sydTU6e4r4WwoMcH49c7-mYeHiJDHBNvdQ7fGXOM0OvCCAb7xDD57gKdpC_DYBOPTm23fHG0HXSI6v25rFfuCTUZxPGsjO3TN99zjFtRgJ7819xVtIliBh8j1kSn7Cgc-B9NJu9SyoVIRjx5v_IsDWCQwQK9l4fp38iUEdDylvH5MOZnWbeX9jA4dTUdK40iL4kfOWH9sqioAbI8J-S45fza-n7J1f8bvd240HbYlO9ys1OyY9JL_DGRWx_50W1U0kkFWSapY2lUnykD_y7wWQaj6mRQp0uHAZh0CaYd-XctM8ZhIA2lb5X518AenrDN6bUe2espqD3ucJT2jJEBNBpXNE7Yq0yWePkxClfBrRXBkTJpdqOSvybfJBrQ4ooh6l53as_8woNSJ8KfTHHR4jJFFv5WZjSQI6z56PBUg95pMw8VkA-SxaaqR3sggFihws-F8yLzqVENW2YoL3mxIKjFqqRdMgOqSVt_zS_l82AI-JUHsKMX7jG0nf_xLTFvqFMix95DA_mKruPcEgAHkj_mLa3JBjchmQgy6AmqEkwVa5JzWHqmk6Uk5N7ILHDpLxqVcMTMRWKWvp-85dr71IA','xguardClientStatus':0}");
-            var response = _request.Post("https://studio.youtube.com/youtubei/v1/att/esr?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
+            var inter = Match(response.ToString(), "\"interpreterUrl\": \"(.*?)\"");
+            
+            _params.botguardData = _params.botguardData.Substring(3);
+            _params.botguardData = _params.botguardData.Substring(0, _params.botguardData.LastIndexOf("//"));
+            AddAPIHeaders();
+
+            content = new StringContent("{'challenge':'a=5&a2=3&b=y76lp5V5SBoPJtIoAngoNNQFzHs&c=1608416431&d=62&e3=UC-6PU5Yrqd-RIv9tmCvNeDg&c1a=1&hh=itTvXg4nds0hbiVAm3nSgNAklGQNKWOzyTgJX5hG6iQ','botguardResponse':'!CgmlCSDNAAXj0ixo40JlW7Gzehm0s1ghvbX4tvxQLQIAAAA_UgAAACloAQcKAReGNWzximOR3H7aWhqcwt2rL8RSzt6XS97KiqTKwnHbHzTJ2Fe062oeXSqmwZMHz4vbTO9spai7u5sEhREhjC0VLjonVIFY1ydjA0Mh6cEjGUUvf5sN3pxK59CqFjobWaIeAtWWXU8PmROioQJ7Qsz4_HFh8l3xfmg9DoLX4n53MHdeS3bbPV3aFmd1aUqGZYTvvQZsIOhQloJxA3oLWjQumiMwrejkgyO0sozIm1SQHPRvBogZhdVVYlSLuTv3F_WCvJkV50T0BmHMQEwMAJIw7jb3bAICYPGA4JcUFPsekzU2ttlIQ0DFUX2-D5LPQswQtjTnDpPeS_cOOfIdze4rtWoJ8huvPX8Fs2h_ZWUNHegCCFlFYieZApoaSMXNW4xOXeFAh1OBTiqnowH6lhFmdbknUZOBawoAE49j5KAG81QP7KFAjqnKXPS1Jpa7KMMlW2KYhB7HYvCDuDkVtu3kgXtblWiS0IEBuLrAZ3RlUpug3tyOZxY5BEMSHuN_Kg9w548q9qVzk8NDN7QgEMf4lxABeprgto4_tw3mllbrJI2xEhGL6XrFmjSXYiW1KDgJP01gAgmVCw9gbFiaZIN10C3VUl7ebkwMtXYfZCe0iNZG3vfy_LQmEM2FMvRmSk32Uso-ApC8YJdFL7dRHcLZAgpMkacQ0OiEv1s9W01Ehclgh6snzNMqeBAbB06XB8eGUyrmBbPyMvjHQALlwjDeztnj3-a_94FuPHN8tgz5se_fyi-Jl_BD1A7wpzONUKmIdlMO4PoCst_YGVnlHWUsdgH__mMFtb_71cbZuzaCnkTjmIkN-RAO5WrwKua2SzyhLHI9ISkgjdg9L-O4taE61-KCFL3kwu9k3XdEUBCC1nddelsST2VNmYpeBZp2jIN31bG0ElMUD4kbGnaPXHiPCjJBsBrOQz1qI9IiI4OWP0wAfvq9cKymYgJyZJ899H0ylNM0kO-44XplaGScnpxLGV0JYlLWoTBjYe2com7jnrtz5KNEwheCYfYiwHtaa9HFCjzPAAy4vdueUW6OUaUFz3xzkcpeZ1lApDci_7XpV9X7UMI3f3-sJcoMrz-1x-9e_Q2Ydi1E7cAsM8rYrhVmmdV5DhdiTGOc__d2TpzGTZ5V9_dGu21AhUzarKgpbFIXXI17t-sy7kNVSU9mRUA-JSMaIsInrCURkL7SAjTj6e79MHh1ZnjgWsBK_s6231dgVan4mS-Px_usmPKogDoto4P7zkGJUo01WLzMQeL_l47lLIk','xguardClientStatus':0, 'context':{'client':{'clientName':'" + _params.clientName + "','clientVersion': '" + _params.clientVersion + "','hl': '" + _params.hl + "','gl': '" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_route_delete_playlist_to_outertube','value':'false'},{'key':'force_live_chat_merchandise_upsell','value':'false'}]},'user':{'delegationContext':{'roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'},'externalChannelId': '" + _params.externalChannelId + "'},'serializedDelegationContext': '" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce': '" + _params.EVENT_ID + "'}}");
+            response = _request.Post("https://studio.youtube.com/youtubei/v1/att/esr?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
             _params.sessionToken = Match(response.ToString(), "\"sessionToken\": \"(.*?)\"");
-            return true;
+            return _params.sessionToken is null ? false : true;
         }
         private bool GetVideos()
         {
@@ -241,21 +257,49 @@ namespace YouTubeStreamStarter.Models
             
             if(_clientVideos == null || _clientVideos.Count == 0)
                 _clientVideos = JsonConvert.DeserializeObject<ObservableCollection<VideoModel>>("[" + Match(response.ToString(), "\"videos\": \\[(.*?)\\],...\"videosTotalSize", RegexOptions.Singleline) + "]");
+
+            foreach (var item in _clientVideos)
+                item.PropertyChanged += VideoModelHandler;
             
-
             return true;
         }
-        private bool SaveChangesVideos()
+
+        private bool SaveChangesVideosAsync()
         {
-            //var content = new StringContent("{'channelId':'" + _params.channelAddress + "','videoUpdate':{'privacyState':{'privacy':'" + privacy + "'}},'videos':{'videoIds':" + videoIds + "},'context':{'client':{'clientName':" + _params.clientName + ",'clientVersion':'" + _params.clientVersion + "','hl':'" + _params.hl + "','gl':'" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_live_chat_merchandise_upsell','value':'false'},{'key':'force_route_delete_playlist_to_outertube','value':'false'}],'sessionInfo':{'token':'" + _params.sessionToken + "'}},'user':{'onBehalfOfUser':'" + _params.onBehalfOfUser + "', 'delegationContext':{'externalChannelId':'" + _params.externalChannelId + "','roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'}},'serializedDelegationContext':'" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce':'" + _params.EVENT_ID + "'}}");
-            //var 
+            var publicKey = AppData.GetPair<string>("privacyUpdateValues.public");
+            var unlistedKey = AppData.GetPair<string>("privacyUpdateValues.unlisted");
+            var privateKey = AppData.GetPair<string>("privacyUpdateValues.private");
+
+            var dict = new Dictionary<string, List<string>>()
+            {
+                [publicKey.Value] = new List<string>(),
+                [unlistedKey.Value] = new List<string>(),
+                [privateKey.Value] = new List<string>(),
+            };
+            for (int i = 0; i < _clientVideos.Count; i++)
+            {
+                if(_clientVideos[i].privacy != _serverVideos[i].privacy)
+                {
+                    if (_clientVideos[i].privacy == publicKey.Key)
+                        dict[publicKey.Value].Add(_clientVideos[i].videoId);
+                    if (_clientVideos[i].privacy == unlistedKey.Key)
+                        dict[unlistedKey.Value].Add(_clientVideos[i].videoId);
+                    if (_clientVideos[i].privacy == privateKey.Key)
+                        dict[privateKey.Value].Add(_clientVideos[i].videoId);
+                }
+            }
+
+            foreach (var item in dict.Where(x => x.Value.Count > 0))
+            {
+                AddAPIHeaders();
+                var content = new StringContent("{'channelId':'" + _params.channelAddress + "','videoUpdate':{'privacyState':{'privacy':'" + "VIDEO_UPDATE_PRIVACY_SETTING_PUBLIC" + "'}},'videos':{'videoIds':[\"ghW4hIxilkA\"]},'context':{'client':{'clientName':" + _params.clientName + ",'clientVersion':'" + _params.clientVersion + "','hl':'" + _params.hl + "','gl':'" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_live_chat_merchandise_upsell','value':'false'},{'key':'force_route_delete_playlist_to_outertube','value':'false'}],'sessionInfo':{'token':'" + _params.sessionToken + "'}},'user':{'onBehalfOfUser':'" + _params.onBehalfOfUser + "', 'delegationContext':{'externalChannelId':'" + _params.externalChannelId + "','roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'}},'serializedDelegationContext':'" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce':'" + _params.EVENT_ID + "'}}");
+                _request.Post("https://studio.youtube.com/youtubei/v1/creator/enqueue_creator_bulk_action?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
+            }
+            GetVideos();
             return true;
         }
-
         private bool SaveChangesChannelData()
         {
-            if (IsSaved) return true;
-
             var strContentBegin = "{'externalChannelId':'" + _params.externalChannelId + "',";
             var strContentEnd = "'context':{'client':{'clientName':" + _params.clientName + ",'clientVersion':'" + _params.clientVersion + "','hl':'" + _params.hl + "','gl':'" + _params.gl + "','experimentsToken':'','utcOffsetMinutes':240},'request':{'returnLogEntry':true,'internalExperimentFlags':[{'key':'force_live_chat_merchandise_upsell','value':'false'},{'key':'force_route_delete_playlist_to_outertube','value':'false'}],'sessionInfo':{'token':'" + _params.sessionToken + "'}},'user':{'onBehalfOfUser':'" + _params.onBehalfOfUser + "', 'delegationContext':{'externalChannelId':'" + _params.externalChannelId + "','roleType':{'channelRoleType':'CREATOR_CHANNEL_ROLE_TYPE_OWNER'}},'serializedDelegationContext':'" + _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT + "'},'clientScreenNonce':'" + _params.EVENT_ID + "'}}";
 
@@ -269,31 +313,72 @@ namespace YouTubeStreamStarter.Models
                 strContent += strContentName;
             if (_clientDescription != _serverDescription)
                 strContent += strContentDescription;
-            if (_clientAvatar != _serverAvatar)
+            if (_differentAvatars)
             {
                 var imageID = UploadImage(_clientAvatar.LocalPath);
                 strContent += strContentAvatar + imageID + ",";
             }
-            if (_clientBanner != _serverBanner)
+            if (_differentBanners)
             {
                 var imageID = UploadImage(_clientBanner.LocalPath);
                 strContent += strContentBanner + imageID + ",";
             }
-            strContent += strContentEnd;
+            if (strContent != strContentBegin)
+            {
+                strContent += strContentEnd;
 
-            AddAPIHeaders();
-            var content = new StringContent(strContent);
-            _request.Post("https://studio.youtube.com/youtubei/v1/channel_edit/update_channel_page_settings?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
-
+                AddAPIHeaders();
+                var content = new StringContent(strContent);
+                _request.Post("https://studio.youtube.com/youtubei/v1/channel_edit/update_channel_page_settings?alt=json&key=" + _params.INNERTUBE_API_KEY, content);
+            }
             GetChannelData();
             CheckIsSaved();
             return true;
         }
-        private void GenerateSAPSIDHASH(string referer)
+
+        private void CheckIsSaved()
         {
-            var unixTimestamp = GetUnixTimestamp();
-            var rawHash = unixTimestamp + " " + _request.Cookies.GetCookies("https://google.com").Where(x => x.Name == "SAPISID").Select(x => x.Value).First() + " " + referer;
-            _params.SAPISIDHASH = $"SAPISIDHASH {unixTimestamp}_{GetHash(rawHash)}";
+            if (_clientName != _serverName || _clientDescription != _serverDescription)
+            {
+                IsSaved = false;
+                return;
+            }
+            var a1 = GetBytesFromImage(_clientAvatar.LocalPath);
+            var a2 = GetBytesFromImage(_serverAvatar.LocalPath);
+
+            if (!a1.AsSpan().SequenceEqual(a2))
+            {
+                IsSaved = false;
+                _differentAvatars = true;
+                return;
+            }
+            else
+            { 
+                _differentAvatars = false; 
+            }
+
+
+            var b1 = GetBytesFromImage(_clientBanner.LocalPath);
+            var b2 = GetBytesFromImage(_serverBanner.LocalPath);
+
+            if (!b1.AsSpan().SequenceEqual(b2))
+            {
+                IsSaved = false;
+                return;
+            }
+
+            if (!_serverVideos.SequenceEqual(_clientVideos))
+            {
+                IsSaved = false;
+                _differentBanners = true;
+                return;
+            }
+            else
+            {
+                _differentBanners = false;
+            }
+
+            IsSaved = true;
         }
 
         private string UploadImage(string pathToImage)
@@ -338,66 +423,12 @@ namespace YouTubeStreamStarter.Models
 
             return result;
         }
-        private void AddAPIHeaders()
+        private void GenerateSAPSIDHASH(string referer)
         {
-            _request.AddHeader(HttpHeader.ContentType, "application/json");
-            _request.AddHeader("Authorization", _params.SAPISIDHASH);
-            _request.AddHeader("accept", "*/*");
-            _request.AddHeader("sec-fetch-dest", "empty");
-            _request.AddHeader("sec-fetch-mode", "same-origin");
-            _request.AddHeader("sec-fetch-site", "same-origin");
-            _request.AddHeader("x-client-data", "CIa2yQEIorbJAQjEtskBCKmdygEIrMfKAQj1x8oBCPjHygEItMvKAQjc1coBCNCaywEIwZzLAQ==");
-            _request.AddHeader("Origin", "https://studio.youtube.com");
-            _request.AddHeader("x-origin", "https://studio.youtube.com");
+            var unixTimestamp = GetUnixTimestamp();
+            var rawHash = unixTimestamp + " " + _request.Cookies.GetCookies("https://google.com").Where(x => x.Name == "SAPISID").Select(x => x.Value).First() + " " + referer;
+            _params.SAPISIDHASH = $"SAPISIDHASH {unixTimestamp}_{GetHash(rawHash)}";
         }
-        private void CheckIsSaved()
-        {
-            if (_clientName != _serverName || _clientDescription != _serverDescription)
-            {
-                IsSaved = false;
-                return;
-            }
-            var a1 = GetBytesFromImage(_clientAvatar.LocalPath);
-            var a2 = GetBytesFromImage(_serverAvatar.LocalPath);
-
-            if (!a1.AsSpan().SequenceEqual(a2))
-            {
-                IsSaved = false;
-                return;
-            }
-
-            var b1 = GetBytesFromImage(_clientBanner.LocalPath);
-            var b2 = GetBytesFromImage(_serverBanner.LocalPath);
-
-            if (!b1.AsSpan().SequenceEqual(b2))
-            {
-                IsSaved = false;
-                return;
-            }
-
-            IsSaved = true;
-        }
-
-        private byte[] GetBytesFromImage(string path)
-        {
-            var bitmapClientImage = LoadBitmapImage(path);
-            int bytesPerPixel = bitmapClientImage.Format.BitsPerPixel / 8;
-            var stride = bitmapClientImage.PixelWidth * bytesPerPixel;
-            int arrayLength = stride * bitmapClientImage.PixelHeight;
-            var result = new byte[arrayLength];
-            bitmapClientImage.CopyPixels(result, stride, 0);
-
-            return result;
-        }
-
-        private string Match(string input, string pattern, RegexOptions options)
-        {
-            var match = Regex.Match(input, pattern, options);
-            if (match.Success)
-                return match.Groups[match.Groups.Count - 1].Value;
-            return null;
-        }
-        private string Match(string input, string pattern) => Match(input, pattern, RegexOptions.None);
         private string GetHash(string input)
         {
             var hash = "";
@@ -414,7 +445,48 @@ namespace YouTubeStreamStarter.Models
             return hash;
         }
         private int GetUnixTimestamp() => (int)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalSeconds;
+        private void AddAPIHeaders()
+        {
+            _request.AddHeader(HttpHeader.ContentType, "application/json");
+            _request.AddHeader("Authorization", _params.SAPISIDHASH);
+            _request.AddHeader("accept", "*/*");
+            _request.AddHeader("sec-fetch-dest", "empty");
+            _request.AddHeader("sec-fetch-mode", "same-origin");
+            _request.AddHeader("sec-fetch-site", "same-origin");
+            _request.AddHeader("x-client-data", "CIa2yQEIorbJAQjEtskBCKmdygEIrMfKAQj1x8oBCPjHygEItMvKAQijzcoBCNzVygEIk5rLAQjRmssBCMGcywEI1JzLAQ==");
+            _request.AddHeader("Origin", "https://studio.youtube.com");
+            _request.AddHeader("x-origin", "https://studio.youtube.com");
+            //_request.AddHeader("sec-ch-ua", "Google Chrome\";v=\"87\", \" Not;A Brand\";v=\"99\", \"Chromium\";v=\"87\"");
+            //_request.AddHeader("sec-ch-ua-mobile", "?0");
+            _request.AddHeader("X-YouTube-Delegation-Context", _params.INNERTUBE_CONTEXT_SERIALIZED_DELEGATION_CONTEXT);
+            _request.AddHeader("X-YouTube-Client-Name", _params.clientName);
+            _request.AddHeader("X-YouTube-Client-Version", _params.clientVersion);
+            //_request.AddHeader("X-Goog-AuthUser", "0");
+            //_request.AddHeader("X-YouTube-Page-CL", "347838303");
+            //_request.AddHeader("X-YouTube-Page-Label", "youtube.studio.web_20201216_03_RC01");
+            //_request.AddHeader("X-Goog-Visitor-Id", "CgtwM3FrV1Y2THZkMCic8vn-BQ%3D%3D");
+            //_request.AddHeader("X-YouTube-Time-Zone", "Europe/Saratov");
+            //_request.AddHeader("X-YouTube-Ad-Signals", "dt=1608415514732&flash=0&frm&u_tz=240&u_his=2&u_java&u_h=1080&u_w=1920&u_ah=1080&u_aw=1858&u_cd=24&u_nplug=3&u_nmime=4&bc=31&bih=1009&biw=1858&brdim=62%2C0%2C62%2C0%2C1858%2C0%2C1858%2C1080%2C1858%2C1009&vis=1&wgl=true&ca_type=image");
+        }
+        private byte[] GetBytesFromImage(string path)
+        {
+            var bitmapClientImage = LoadBitmapImage(path);
+            int bytesPerPixel = bitmapClientImage.Format.BitsPerPixel / 8;
+            var stride = bitmapClientImage.PixelWidth * bytesPerPixel;
+            int arrayLength = stride * bitmapClientImage.PixelHeight;
+            var result = new byte[arrayLength];
+            bitmapClientImage.CopyPixels(result, stride, 0);
 
+            return result;
+        }
+        private string Match(string input, string pattern, RegexOptions options)
+        {
+            var match = Regex.Match(input, pattern, options);
+            if (match.Success)
+                return match.Groups[match.Groups.Count - 1].Value;
+            return null;
+        }
+        private string Match(string input, string pattern) => Match(input, pattern, RegexOptions.None);
         public static BitmapImage LoadBitmapImage(string fileName)
         {
             using (var stream = new FileStream(fileName, FileMode.Open))
@@ -426,6 +498,20 @@ namespace YouTubeStreamStarter.Models
                 bitmapImage.EndInit();
                 bitmapImage.Freeze();
                 return bitmapImage;
+            }
+        }
+        private void VideoModelHandler(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != "IsChecked")
+            {
+                var videoSaved = true;
+                if (!_serverVideos.SequenceEqual(_clientVideos))
+                {
+                    IsSaved = false;
+                    return;
+                }
+                if (videoSaved)
+                    CheckIsSaved();
             }
         }
 

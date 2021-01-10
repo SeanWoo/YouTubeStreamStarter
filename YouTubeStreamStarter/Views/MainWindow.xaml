@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:YouTubeStreamStarter"
+        xmlns:models="clr-namespace:YouTubeStreamStarter.Models"
         xmlns:conv="clr-namespace:YouTubeStreamStarter.Models.Converters"
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
@@ -15,6 +16,8 @@
         Title="YouTube Stream Starter" Height="620" Width="1050" ResizeMode="NoResize" WindowStyle="None">
     <Window.Resources>
         <conv:InverseBooleanConverter x:Key="InverseBooleanConverter"/>
+        <conv:PrivacyValueConverter x:Key="PrivacyValueConverter"/>
+        <conv:PrivacyStringConverter x:Key="PrivacyStringConverter"/>
     </Window.Resources>
     <Grid>
         <Border BorderBrush="{StaticResource PrimaryHueLightBrush}" BorderThickness="2" Padding="2,0,2,2">
@@ -41,14 +44,11 @@
                 <Grid Grid.Row="2" Grid.Column="1">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="1*"/>
-                        <ColumnDefinition Width="5"/>
-                        <ColumnDefinition Width="1"/>
-                        <ColumnDefinition Width="5"/>
                         <ColumnDefinition Width="0.6*"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel>
                         <materialDesign:Card>
-                            <StackPanel>
+                            <ItemsControl ScrollViewer.CanContentScroll="True" ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <Expander Header="Аутентификационные данные аккаунта" Padding="10">
                                     <TextBox Text="{Binding ChannelCookie, UpdateSourceTrigger=PropertyChanged}" materialDesign:HintAssist.Hint="Вставьте сюда куки от аккаунта" MaxHeight="500" AcceptsReturn="True" VerticalScrollBarVisibility="Auto" TextWrapping="Wrap" Style="{StaticResource MaterialDesignOutlinedTextFieldTextBox}"/>
                                 </Expander>
@@ -58,11 +58,7 @@
                                             <ColumnDefinition Width="200"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="310"/>
-                                            <RowDefinition Height="35"/>
-                                        </Grid.RowDefinitions>
-                                        <materialDesign:Flipper Margin="0 -1 0 0" Width="200" Height="301" HorizontalAlignment="Left">
+                                        <materialDesign:Flipper Margin="0 0 0.000000001 0" Width="200" Height="300" HorizontalAlignment="Left">
                                             <materialDesign:Flipper.FrontContent>
                                                 <Grid>
                                                     <Grid.RowDefinitions>
@@ -122,17 +118,16 @@
                                             </materialDesign:ColorZone>
                                             <TextBox Grid.Row="1" Text="{Binding Channel.Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="0 5 0 0" VerticalScrollBarVisibility="Auto" AcceptsReturn="True" TextWrapping="Wrap" Style="{StaticResource MaterialDesignFilledTextFieldTextBox}" materialDesign:HintAssist.Hint="Описание канала" materialDesign:HintAssist.IsFloating="True"/>
                                         </Grid>
-                                        <Button Grid.Row="1" Command="{Binding SaveChangesChannelData}" Grid.ColumnSpan="99" Content="СОХРАНИТЬ ИЗМЕНЕНИЯ" Margin="0 5 0 0"/>
                                     </Grid>
                                 </Expander>
                                 <Expander Header="Видео" Padding="10">
                                     <StackPanel>
-                                        <DataGrid AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserReorderColumns="False" CanUserSortColumns="False" ItemsSource="{Binding Channel.Videos}">
+                                        <DataGrid MaxHeight="400" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False" CanUserReorderColumns="False" CanUserSortColumns="False" ItemsSource="{Binding Channel.Videos, UpdateSourceTrigger=PropertyChanged}">
                                             <DataGrid.Columns>
-                                                <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" ElementStyle="{StaticResource MaterialDesignDataGridCheckBoxColumnStyle}" EditingElementStyle="{StaticResource MaterialDesignDataGridCheckBoxColumnEditingStyle}">
+                                                <DataGridCheckBoxColumn Binding="{Binding IsChecked, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" ElementStyle="{StaticResource MaterialDesignDataGridCheckBoxColumnStyle}" EditingElementStyle="{StaticResource MaterialDesignDataGridCheckBoxColumnEditingStyle}">
                                                     <DataGridCheckBoxColumn.Header>
                                                         <Border Background="Transparent">
-                                                            <CheckBox IsChecked="{Binding Data.IsAllItems1Selected, Source={StaticResource DataContextProxy}}" />
+                                                            <CheckBox IsChecked="{Binding Path=DataContext.IsAllChecked, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType={x:Type Window}}}" />
                                                         </Border>
                                                     </DataGridCheckBoxColumn.Header>
                                                     <DataGridCheckBoxColumn.HeaderStyle>
@@ -140,6 +135,9 @@
                                                         </Style>
                                                     </DataGridCheckBoxColumn.HeaderStyle>
                                                 </DataGridCheckBoxColumn>
+                                                <DataGridTextColumn Header="Название" MaxWidth="300" Binding="{Binding title}"/>
+                                                <materialDesign:DataGridComboBoxColumn Header="Доступ" IsEditable="True" Width="180" SelectedValueBinding="{Binding privacy, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged, Converter={StaticResource PrivacyStringConverter}}" ItemsSourceBinding="{Binding Path=DataContext.PrivacyVideoVariants.Values, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType={x:Type Window}}}">
+                                                </materialDesign:DataGridComboBoxColumn>
                                             </DataGrid.Columns>
                                         </DataGrid>
                                     </StackPanel>
@@ -147,8 +145,12 @@
                                 <Expander Header="Настройки стрима" Padding="10">
 
                                 </Expander>
-                            </StackPanel>
+                            </ItemsControl>
                         </materialDesign:Card>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom" Margin="10 0 0 0">
+                        <Button Command="{Binding OpenChannel}" Content="Открыть канал в браузере" Margin="0 0 0 5"/>
+                        <Button Command="{Binding SaveChangesChannelData}" Style="{StaticResource MaterialDesignOutlinedButton}" Content="СОХРАНИТЬ ИЗМЕНЕНИЯ"/>
                     </StackPanel>
                 </Grid>
             </Grid>

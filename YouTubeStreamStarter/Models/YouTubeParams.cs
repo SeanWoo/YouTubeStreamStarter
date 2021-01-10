@@ -22,5 +22,7 @@ namespace YouTubeStreamStarter.Models
         internal string SAPISIDHASH;
         internal string clientName;
         internal string onBehalfOfUser;
+        internal string challenge;
+        internal string botguardData;
     }
 }

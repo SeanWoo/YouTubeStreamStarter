@@ -2,14 +2,15 @@
 
 namespace YouTubeStreamStarter.Models
 {
-    public enum PrivacyVideo : byte
+    public enum PrivacyVideo
     {
-        None = 0,
+        [EnumMember(Value = "")]
+        None,
         [EnumMember(Value = "VIDEO_PRIVACY_PUBLIC")]
-        Public = 1,
+        Public,
         [EnumMember(Value = "VIDEO_PRIVACY_UNLISTED")]
-        Unlisted = 2,
+        Unlisted,
         [EnumMember(Value = "VIDEO_PRIVACY_PRIVATE")]
-        Private = 3,
+        Private,
     }
 }

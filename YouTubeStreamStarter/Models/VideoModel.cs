@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json.Serialization;
 using YouTubeStreamStarter.Models.Converters;
@@ -115,12 +118,31 @@ namespace YouTubeStreamStarter.Models
         public string trackingParams { get; set; }
     }
 
-    public class VideoModel
+    public class VideoModel : INotifyPropertyChanged, IEquatable<VideoModel>
     {
+        private bool _isChecked = false;
+        private string _privacy;
+
+        [JsonIgnore]
+        public bool IsChecked {
+            get => _isChecked;
+            set
+            {
+                _isChecked = value;
+                OnPropertyChanged();
+            }
+        }
+        public string privacy{ 
+            get => _privacy;
+            set
+            {
+                _privacy = value;
+                OnPropertyChanged();
+            } 
+        }
         public string videoId { get; set; }
         public string title { get; set; }
         public string description { get; set; }
-        public PrivacyVideo privacy { get; set; }
         public string channelId { get; set; }
         public string timePublishedSeconds { get; set; }
         public ThumbnailDetails thumbnailDetails { get; set; }
@@ -145,6 +167,17 @@ namespace YouTubeStreamStarter.Models
         public VideoResolutions videoResolutions { get; set; }
         public PrivateShare privateShare { get; set; }
         public LoggingDirectives loggingDirectives { get; set; }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        public bool Equals(VideoModel other)
+        {
+            if (other is null) return false;
+
+            return this.privacy == other.privacy;
+        }
+        public override int GetHashCode() => (title, privacy, thumbnailDetails).GetHashCode();
+        private void OnPropertyChanged([CallerMemberName] string name = "") => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
 

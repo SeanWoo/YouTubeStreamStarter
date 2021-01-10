@@ -6,22 +6,14 @@ using System.Windows.Data;
 
 namespace YouTubeStreamStarter.Models.Converters
 {
-    public class PrivacyConverter
+    public static class PrivacyConverter
     {
-        public PrivacyVideo Convert(string value)
+        public static PrivacyVideo Convert(string value)
         {
-            var enumType = typeof(PrivacyVideo);
-            foreach(var member in enumType.GetMembers())
-            {
-                var valueAttributes = member.GetCustomAttributes(typeof(EnumMemberAttribute), false);
-                var memberValue = ((EnumMemberAttribute)valueAttributes[0]).Value;
-                if (value == memberValue)
-                    return (PrivacyVideo)Enum.Parse(typeof(PrivacyVideo), member.Name);
-            }
-            return PrivacyVideo.None;
+            return (PrivacyVideo)Enum.Parse(typeof(PrivacyVideo), value);
         }
 
-        public string Convert(PrivacyVideo value)
+        public static string Convert(PrivacyVideo value)
         {
             var enumType = typeof(PrivacyVideo);
             var memberInfos = enumType.GetMember(value.ToString());
